@@ -1,6 +1,6 @@
-# ts-svc-autopilot
+# Service Autopilot for Tailscale
 
-Automatically expose Docker containers as Tailscale Services using label-based configuration - zero-config service mesh for your homelab.
+Automatically expose Docker containers as Tailscale Services using label-based configuration - zero-config service mesh for your dockerized services.
 
 ## Quick Start
 
