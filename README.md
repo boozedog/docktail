@@ -188,7 +188,7 @@ See [Tailscale Service documentation](https://tailscale.com/kb/1552/tailscale-se
 
 **Smart Defaults:**
 - *`service-port`: Defaults to `80`, OR `443` if `service-protocol=https`
-- **`service-protocol`: Defaults to `https` if `service-port=443`, otherwise `http`
+- **`service-protocol`: Defaults to match `protocol` for TCP backends, otherwise `https` if `service-port=443`, otherwise `http`
 - ***`protocol`: Defaults to `https` if container `port=443`, otherwise `http`
 
 **Critical:** If `ports: "9080:80"`, then `docktail.service.port=80` (container port, NOT 9080)
@@ -276,6 +276,7 @@ services:
       - "docktail.service.port=5432"
       - "docktail.service.protocol=tcp"
       - "docktail.service.service-port=5432"
+      # service-protocol auto-defaults to "tcp" (matches backend protocol)
 ```
 
 ### API with HTTPS (Auto TLS Certificate)

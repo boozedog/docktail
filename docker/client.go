@@ -104,59 +104,8 @@ func (c *Client) parseContainer(ctx context.Context, containerID string, labels 
 	port := labels[apptypes.LabelPort]
 	serviceProtocol := labels[apptypes.LabelServiceProtocol]
 
-	// Smart defaults based on both fields
-	if port == "" && serviceProtocol == "" {
-		// Both unset: default to HTTP on port 80
-		port = "80"
-		serviceProtocol = "http"
-		log.Debug().
-			Str("container", containerID[:12]).
-			Msg("No port or protocol specified, defaulting to HTTP on port 80")
-	} else if port == "" && serviceProtocol != "" {
-		// Protocol set, port unset: default port based on protocol
-		switch serviceProtocol {
-		case "https":
-			port = "443"
-		case "http":
-			port = "80"
-		default:
-			port = "80"
-		}
-		log.Debug().
-			Str("container", containerID[:12]).
-			Str("service_protocol", serviceProtocol).
-			Str("defaulted_service_port", port).
-			Msg("Service port not specified, defaulted based on protocol")
-	} else if port != "" && serviceProtocol == "" {
-		// Port set, protocol unset: default protocol based on port
-		switch port {
-		case "443":
-			serviceProtocol = "https"
-		case "80":
-			serviceProtocol = "http"
-		default:
-			serviceProtocol = "http"
-		}
-		log.Debug().
-			Str("container", containerID[:12]).
-			Str("service_port", port).
-			Str("defaulted_service_protocol", serviceProtocol).
-			Msg("Service protocol not specified, defaulted based on port")
-	}
-	// else: both are set, use as-is
-
-	// Validate service protocol
-	validProtocols := map[string]bool{
-		"http":                true,
-		"https":               true,
-		"tcp":                 true,
-		"tls-terminated-tcp":  true,
-	}
-	if !validProtocols[serviceProtocol] {
-		return nil, fmt.Errorf("invalid service-protocol: %s (must be http, https, tcp, or tls-terminated-tcp)", serviceProtocol)
-	}
-
 	// Smart defaults for target/container protocol based on CONTAINER port
+	// This needs to be parsed FIRST since it affects service protocol defaults
 	protocol := labels[apptypes.LabelTargetProtocol]
 	if protocol == "" {
 		// Default based on container port
@@ -174,8 +123,81 @@ func (c *Client) parseContainer(ctx context.Context, containerID string, labels 
 	}
 
 	// Validate target protocol
+	validProtocols := map[string]bool{
+		"http":                true,
+		"https":               true,
+		"tcp":                 true,
+		"tls-terminated-tcp":  true,
+	}
 	if !validProtocols[protocol] {
 		return nil, fmt.Errorf("invalid protocol: %s (must be http, https, tcp, or tls-terminated-tcp)", protocol)
+	}
+
+	// Smart defaults based on both fields
+	// IMPORTANT: When backend protocol is TCP, service protocol should also default to TCP
+	if port == "" && serviceProtocol == "" {
+		// Both unset: default based on backend protocol
+		if protocol == "tcp" || protocol == "tls-terminated-tcp" {
+			port = "80"
+			serviceProtocol = protocol // Use same protocol as backend for TCP
+			log.Debug().
+				Str("container", containerID[:12]).
+				Str("backend_protocol", protocol).
+				Msg("No port or service protocol specified, defaulting to TCP on port 80 to match backend")
+		} else {
+			port = "80"
+			serviceProtocol = "http"
+			log.Debug().
+				Str("container", containerID[:12]).
+				Msg("No port or protocol specified, defaulting to HTTP on port 80")
+		}
+	} else if port == "" && serviceProtocol != "" {
+		// Protocol set, port unset: default port based on protocol
+		switch serviceProtocol {
+		case "https":
+			port = "443"
+		case "http":
+			port = "80"
+		default:
+			port = "80"
+		}
+		log.Debug().
+			Str("container", containerID[:12]).
+			Str("service_protocol", serviceProtocol).
+			Str("defaulted_service_port", port).
+			Msg("Service port not specified, defaulted based on protocol")
+	} else if port != "" && serviceProtocol == "" {
+		// Port set, protocol unset: default protocol based on backend protocol first, then port
+		if protocol == "tcp" || protocol == "tls-terminated-tcp" {
+			serviceProtocol = protocol // Use same protocol as backend for TCP
+			log.Debug().
+				Str("container", containerID[:12]).
+				Str("service_port", port).
+				Str("backend_protocol", protocol).
+				Str("defaulted_service_protocol", serviceProtocol).
+				Msg("Service protocol not specified, defaulted to match backend TCP protocol")
+		} else {
+			// For HTTP/HTTPS backends, default based on port
+			switch port {
+			case "443":
+				serviceProtocol = "https"
+			case "80":
+				serviceProtocol = "http"
+			default:
+				serviceProtocol = "http"
+			}
+			log.Debug().
+				Str("container", containerID[:12]).
+				Str("service_port", port).
+				Str("defaulted_service_protocol", serviceProtocol).
+				Msg("Service protocol not specified, defaulted based on port")
+		}
+	}
+	// else: both are set, use as-is
+
+	// Validate service protocol
+	if !validProtocols[serviceProtocol] {
+		return nil, fmt.Errorf("invalid service-protocol: %s (must be http, https, tcp, or tls-terminated-tcp)", serviceProtocol)
 	}
 
 	// Get container details for port bindings

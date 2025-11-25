@@ -29,8 +29,8 @@ services:
       - "docktail.service.name=test-web1"
       - "docktail.service.port=80"               # CONTAINER port (RIGHT side of "9080:80" above)
       - "docktail.service.protocol=http"         # Container speaks HTTP (Tailscale terminates TLS)
-      - "docktail.service.service-port=443"      # Port to expose on Tailscale (defaults to HTTPS)
-      - "docktail.service.service-protocol=https" # Tailscale serves HTTPS with auto TLS cert
+      - "docktail.service.service-port=80"      # Port to expose on Tailscale (defaults to HTTPS)
+      - "docktail.service.service-protocol=http" # Tailscale serves HTTPS with auto TLS cert
 
   # Example web application - nginx instance 2 (using smart defaults)
   web2:
@@ -68,6 +68,22 @@ services:
       # Result:
       # Tailnet: https://public-demo.<tailnet>.ts.net (serve)
       # Public:  https://<machine-name>.<tailnet>.ts.net:443 (funnel)
+
+  # Example: TCP service (tests fix for issue #3)
+  test-tcp:
+    image: nginx:latest
+    container_name: test-tcp
+    restart: unless-stopped
+    ports:
+      - "9090:80"
+    labels:
+      - "docktail.service.enable=true"
+      - "docktail.service.name=test-tcp"
+      - "docktail.service.port=80"
+      - "docktail.service.protocol=tcp"
+      # service-protocol should auto-default to "tcp" (matches backend)
+      # service-port should auto-default to "80"
+      # Result: tailscale serve --service=svc:tcp-test --tcp=80 tcp://localhost:9090
 
 volumes:
   postgres-data:
